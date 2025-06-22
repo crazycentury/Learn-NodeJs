@@ -5,93 +5,134 @@
 // 1. buat prom input dulu
 // 2. save ke json, kalo belom ada filenya suruh buat dulu
 
-const readline = require('node:readline');
-const { stdin: input, stdout: output } = require('node:process');
-const fs = require('node:fs');
+const readline = require('node:readline/promises');
+const { stdin: input, stdout: output, throwDeprecation } = require('node:process');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const rl = readline.createInterface({ input, output});
 
-const folderName = 'daftar_kontak';
-const fileName = 'kontak.json';
-const filePath = path.join(folderName,fileName);
+// function membuat file
+async function writeFile(filePath, fileContent) {
+    try{
+        await fs.writeFile(filePath, fileContent);
+        console.log(`File ${filePath} berhasil dibuat, Coba Cek`);
+    } catch (err) {
+        console.error(`Error saat membuat file ${filePath}`);
+        throw err;
+    }
+}
+   
+// fuction create folder
+async function createFolder(folderName) {
+    try {
+        await fs.mkdir(folderName, { recursive:true});
+        console.log(`Folder ${folderName} berhasil dibuat`);
+        return true;
+    } catch(err) {
+        console.error('Error, terjadi kesalahan saat membaut folder '+folderName, err);
+        throw err;
+    }
+};
 
-rl.question(' Masukan Nama Anda : ', (nama) => {
-    rl.question(' Masukan Email Anda : ', (email) => {
-        rl.question(' Masukan NoTelp Anda : ', (NoTelp) => {
+// function baca file kontak.json
+async function readFile(filePath) {
+    try {
+        const dataFile = await fs.readFile(filePath, { encoding : 'utf-8'});
+        // ?JSO.parse(dataFile);
+        return JSON.parse(dataFile);;
 
-            // cek folder & file udah ada apa belum
-            fs.access(filePath, fs.constants.F_OK, (err) => {
-                if (err) {
-                    if (err.code === 'ENOENT') {
-                        // fungsi buat folder
-                        fs.mkdir(folderName, { recursive: true }, (err) => {
-                            if (err) {
-                                console.log(`Error saat membuat folder ${folderName}`, err);
-                                return;
-                            }
-                            // generate contetnnya
-                            let dataContent = [{nama: nama, email: email, NoTelp: NoTelp}];
-                            let fileContent = JSON.stringify(dataContent, null, 2);
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            console.error(`Error: File ${filePath} tidak ditemukan`);
+        } else {
+            console.error(`Error saat membaca file : `, err);
+        }
+        throw err;
+    }
+};
 
-                            //fungsi buat dan nulis filenya
-                            fs.writeFile(filePath, fileContent, (fileErr) => {
-                                if(fileErr) { 
-                                    console.log(`Error saat membuat file ${fileName}`);
-                                    return;
-                                }
-                                console.log(`File ${fileName} berhasil dibuat, Coba Cek`);
-                            });
-                        });
-                    }else {
-                        console.log(`Error saat akses file ${filePath}`, err);
-                    }
+async function cekFolder(filePath, folderName){
+    let dataArray = [];
 
-                }else{
+    try {
+        // cek folder/file
+        await fs.access(filePath, fs.constants.F_OK);
+        // kalo udah ada
+        console.log(`Folder ${filePath} sudah ada`);
+        dataArray = await readFile(filePath);
 
-                    // ini siasi array kosong untuk nampung
-                    let jsonData = [];
+        return dataArray; // prose lanjut
 
-                    // baca data dari file kontak.json
-                    fs.readFile(filePath, { encoding: 'utf-8'}, (err, dataFile) => {
-                        if (err) {
-                            if (err.code === 'ENOENT') {
-                                console.error(`Error: File ${filePath} tidak ditemukan`);
-                            } else {
-                                console.error(`Error saat membaca file : `, err);
-                            }
-                            return;
-                        }
+    } catch (err) {
+        // kalo error kita cek lagi itu karna foldernya sudah ada atau bukan
+        if (err.code === 'ENOENT') {
+            console.log('Folder belum ada, Membuat folder baru...');
+            try {
+                 // fungsi buat folder
+                await createFolder(folderName);
+                return dataArray;
 
-                        // file dapat, masukan ke array
-                        jsonData = JSON.parse(dataFile);
-                        console.log('isi file ', filePath);
-                        console.log(jsonData);
+            } catch (createErr) {
+                console.error(`Error saat membuat folder ${folderName}`. createErr);
+                throw createErr;
+            }  
+        } else {
+            console.error(`Error saat cek file ${filePath}`, err);
+            throw err;
+        };
+    };
+};
 
-                        // generate databaru
-                        let dataContent = {nama: nama, email: email, NoTelp: NoTelp};
+async function fieldInput(question) {
+    try {
+        const answer = await rl.question(question);
+        return answer;
+    } catch (err) {
+        console.log(`Error, terjadi kesalah saat input data`, err);
+        throw err;
+    }
+    
+}
 
-                        // push data baru ke array
-                        jsonData.push(dataContent);
+const main = async () => {
 
-                        // format data ke string
-                        const fileContent = JSON.stringify(jsonData, null, 2);
+    const folderName = 'daftar_kontak';
+    const fileName = 'kontak.json';
+    const filePath = path.join(folderName,fileName);
 
-                        //fungsi buat update data dan nulis filenya
-                        fs.writeFile(filePath, fileContent, { encoding: 'utf8'}, (fileErr) => {
-                            if(fileErr) { 
-                                console.log(`Error saat membuat file ${fileName}`);
-                                return;
-                            }
-                            console.log(`File ${fileName} berhasil diupdate, Coba Cek`);
-                            console.log('isi file ', filePath);
-                            console.log(jsonData);
-                        }); 
-                    });
-                };
-            });
+    console.log("----------------------------------");
+    console.log("--- Silahkan Masukan Data Anda ---");
+    console.log("----------------------------------");
 
+    try {
+        let dataFile = await cekFolder(filePath, folderName);
+        console.log('data dr file ',dataFile);
+
+        const nama = await fieldInput('Nama Lengkap : ');
+        const email = await fieldInput('Email Address : ');
+        const telp = await fieldInput('Nomor Telephone : ');
+
+        // generate databaru
+        const dataContent = {nama: nama, email: email, NoTelp: telp};
+
+        // push data baru ke array
+        dataFile.push(dataContent);
+
+        console.log('dataFile setelha push ',dataFile);
+
+        // format data ke string
+        const fileContent = JSON.stringify(dataFile, null, 2);
+
+        //fungsi unutk update file
+        await writeFile(filePath, fileContent);
+
+
+    } catch (err) {
+        console.error('\nError pada aplikasi, silahkan cek console : ', err);
+    } finally {
         rl.close();
-        });
-    });
-});
+    }
+};
+
+main();
